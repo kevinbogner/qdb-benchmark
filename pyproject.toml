@@ -1,0 +1,44 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "qdb-benchmark"
+version = "0.1.0"
+description = "One-round fast-phase benchmarks for quantum distance-bounding protocols"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+authors = [
+  {name = "Kevin Bogner"}
+]
+dependencies = [
+  "numpy>=2.0",
+  "scipy",
+  "torch",
+  "pennylane",
+  "cvxpy>=1.3",
+  "clarabel",
+  "scs",
+  "matplotlib",
+  "pandas",
+  "seaborn"
+]
+
+[project.scripts]
+qdb-benchmark = "qdb_benchmark_standalone:main"
+
+[project.optional-dependencies]
+dev = [
+  "pytest",
+  "ruff"
+]
+
+[tool.setuptools]
+py-modules = ["qdb_benchmark_standalone"]
+
+[tool.ruff]
+target-version = "py310"
+line-length = 88
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I"]
