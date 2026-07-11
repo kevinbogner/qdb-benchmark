@@ -1,0 +1,19 @@
+{
+  "title": "qdb-benchmark: code and data artifact for \"Security evaluation of quantum distance-bounding protocols via semidefinite programming\"",
+  "description": "Builds the paper's reduced one-round fast-phase games as semidefinite programs, solves the distance-fraud and mafia-fraud programs for the discrete-variable QDB protocols, runs the restricted Gaussian finite-grid estimator for the CV-QDB protocol, and checks the shipped mafia-fraud certificates with a solver-independent NumPy checker.",
+  "upload_type": "software",
+  "license": "MIT",
+  "creators": [
+    {
+      "name": "Bogner, Kevin",
+      "affiliation": "COSIC, KU Leuven",
+      "orcid": "0009-0003-5167-7177"
+    }
+  ],
+  "keywords": [
+    "quantum distance bounding",
+    "semidefinite programming",
+    "quantum cryptography",
+    "reproducibility artifact"
+  ]
+}
