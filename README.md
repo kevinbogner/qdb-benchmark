@@ -1,5 +1,7 @@
 # qdb-benchmark
 
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.21307978.svg)](https://doi.org/10.5281/zenodo.21307978)
+
 Code and data artifact for the paper
 
 > **Security evaluation of quantum distance-bounding protocols via
