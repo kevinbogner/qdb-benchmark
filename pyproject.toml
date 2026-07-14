@@ -1,13 +1,13 @@
 [build-system]
-requires = ["setuptools>=68"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "qdb-benchmark"
-version = "0.1.0"
-description = "One-round fast-phase benchmarks for quantum distance-bounding protocols"
+version = "1.0.1"
+description = "One-round QDB benchmarks with exact DV mafia-fraud certificates"
 requires-python = ">=3.10"
-license = {text = "MIT"}
+license = "MIT"
 authors = [
   {name = "Kevin Bogner"}
 ]
@@ -35,6 +35,7 @@ dev = [
 
 [tool.setuptools]
 py-modules = ["qdb_benchmark_standalone"]
+packages = ["verification"]
 
 [tool.ruff]
 target-version = "py310"

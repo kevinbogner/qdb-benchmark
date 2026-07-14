@@ -1,6 +1,6 @@
 {
   "title": "qdb-benchmark: code and data artifact for \"Security evaluation of quantum distance-bounding protocols via semidefinite programming\"",
-  "description": "Builds the paper's reduced one-round fast-phase games as semidefinite programs, solves the distance-fraud and mafia-fraud programs for the discrete-variable QDB protocols, runs the restricted Gaussian finite-grid estimator for the CV-QDB protocol, and checks the shipped mafia-fraud certificates with a solver-independent NumPy checker.",
+  "version": "1.0.1",
   "upload_type": "software",
   "license": "MIT",
   "creators": [

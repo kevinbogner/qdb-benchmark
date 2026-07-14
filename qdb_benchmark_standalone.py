@@ -1128,7 +1128,7 @@ def _canonical_protocol_key(protocol: str) -> str:
 """SDP and Gaussian benchmark routines for the QDB artifact.
 
 This module contains the numerical tasks reported in the paper:
-DF state SDPs, DV MF comb SDPs, MF certificate generation/checking, and the
+DF state SDPs, DV MF comb SDPs, numerical MF witness generation/checking, and the
 restricted finite-grid Gaussian CV benchmark.
 """
 
@@ -1556,10 +1556,10 @@ def _mf_comb_dual_solution(
     solver: str = "SCS",
 ) -> Dict[str, object]:
     """
-    Solve the explicit MF comb dual used for the numerical certificates.
+    Solve the explicit MF comb dual used for the numerical witnesses.
 
     With A the average tester, the constraints are kron(Y, I_O) >= A and
-    mu I_Q >= Tr_{RC}(Y), so mu is the certified upper bound.
+    mu I_Q >= Tr_{RC}(Y), so a feasible pair makes mu an upper bound.
     """
     if cp is None:
         raise RuntimeError(
@@ -1613,7 +1613,7 @@ def save_mf_certificate(
     compressed: bool = True,
 ) -> Dict[str, object]:
     """
-    Solve the primal and explicit dual MF comb SDPs and save a NumPy certificate.
+    Solve the primal and explicit dual MF comb SDPs and save a NumPy witness.
     """
     p = _canonical_protocol_key(protocol)
     _dv_protocol_instance(p)
@@ -1631,7 +1631,8 @@ def save_mf_certificate(
     missing = [name for name, value in required.items() if value is None]
     if missing:
         raise RuntimeError(
-            "Certificate solve did not produce solution arrays: " + ", ".join(missing)
+            "Numerical witness solve did not produce solution arrays: "
+            + ", ".join(missing)
         )
 
     save_fn = np.savez_compressed if compressed else np.savez
@@ -1680,23 +1681,20 @@ def repair_mf_witnesses(
     dims: Iterable[int] = (2, 2, 2, 2),
 ) -> Dict[str, float]:
     """
-    Turn the stored witnesses into exactly feasible ones and return a
-    certified bracket for the MF value (paper appendix, "Certified
-    brackets").
+    Apply a floating-point feasibility repair and return a candidate bracket.
 
     Dual: shift Y by e1*I so kron(Y, I_O) dominates the tester, then raise mu
-    by e2 so mu*I_Q dominates Tr_RC of the shifted Y. The shifted pair is dual
-    feasible, so the raised mu upper-bounds the MF value.
+    by e2 so mu*I_Q numerically dominates Tr_RC of the shifted Y.
 
     Primal: clip and renormalize eta, correct the affine comb residual of S
-    exactly against the repaired eta, and mix with the uniform comb
+    in floating-point arithmetic against the repaired eta, and mix with the
+    uniform comb
     eta ⊗ I_RC ⊗ I_O/d_O with the smallest weight (plus a small pad) that
-    restores positive semidefiniteness. The mixed comb is an exactly feasible
-    attack, so its acceptance probability lower-bounds the MF value.
+    numerically restores positive semidefiniteness.
 
-    The returned bracket endpoints are rounded outward at 10 decimal digits
-    after a 1e-12 guard for eigensolver noise; the upper endpoint is capped
-    at the trivial bound 1.
+    This routine uses float64 eigensolvers and a heuristic noise guard. Its
+    output is a diagnostic, not a mathematical certificate. The exact
+    certificate verifiers under 'verification/' provide the proof.
     """
     d_q, d_r, d_c, d_o = [int(v) for v in dims]
     d_rest = d_r * d_c
@@ -1743,15 +1741,15 @@ def repair_mf_witnesses(
     # Outward rounding with a guard for eigensolver noise.
     guard = 1e-12
     scale = 1e10
-    bracket_lower = math.floor((lower - guard) * scale) / scale
-    bracket_upper = min(1.0, math.ceil((mu_rep + guard) * scale) / scale)
+    candidate_lower = math.floor((lower - guard) * scale) / scale
+    candidate_upper = min(1.0, math.ceil((mu_rep + guard) * scale) / scale)
 
-    repair_verified = bool(
+    numerical_repair_passed = bool(
         repaired_dual_slack_1 >= -guard
         and repaired_dual_slack_2 >= -guard
         and repaired_min_eig_s >= -guard
         and repaired_comb_residual <= guard
-        and bracket_lower <= bracket_upper
+        and candidate_lower <= candidate_upper
     )
 
     return {
@@ -1764,9 +1762,9 @@ def repair_mf_witnesses(
         "repaired_comb_residual": repaired_comb_residual,
         "repaired_dual_slack_1_min_eig": repaired_dual_slack_1,
         "repaired_dual_slack_2_min_eig": repaired_dual_slack_2,
-        "bracket_lower": bracket_lower,
-        "bracket_upper": bracket_upper,
-        "repair_verified": repair_verified,
+        "candidate_lower": candidate_lower,
+        "candidate_upper": candidate_upper,
+        "numerical_repair_passed": numerical_repair_passed,
     }
 
 
@@ -1777,7 +1775,11 @@ def check_mf_certificate(
     verbose: bool = True,
 ) -> Dict[str, float | str | bool]:
     """
-    Independently check a saved MF certificate using NumPy linear algebra only.
+    Check numerical residuals of a saved MF solver witness using NumPy.
+
+    This is a tolerance-based diagnostic. It does not certify feasibility over
+    the reals; use the exact certificate verifiers under 'verification/' for
+    the mathematical proof.
     """
     p = _canonical_protocol_key(protocol)
     _dv_protocol_instance(p)
@@ -1847,7 +1849,7 @@ def check_mf_certificate(
         tester=tester, S=S, eta=eta, Y=Y, mu=mu, dims=expected_dims
     )
 
-    certified = bool(
+    numerically_consistent = bool(
         dims_match
         and tester_count_match
         and metadata_match
@@ -1889,19 +1891,19 @@ def check_mf_certificate(
         "hermitian_residual_Y": hermitian_residual_y,
         "tester_count_match": tester_count_match,
         "metadata_match": metadata_match,
-        "certified": certified,
+        "numerically_consistent": numerically_consistent,
         "status": (
-            f"certified within tolerance {tol:g}"
-            if certified
-            else f"failed tolerance {tol:g}"
+            f"numerically consistent within tolerance {tol:g}"
+            if numerically_consistent
+            else f"numerical check failed tolerance {tol:g}"
         ),
         **repair,
     }
 
     if verbose:
-        print(f"{p.upper()} MF certificate check")
+        print(f"{p.upper()} MF numerical witness check")
         print()
-        print(f"certificate:                {cert_path}")
+        print(f"numerical witness:          {cert_path}")
         print(f"primal attack value:        {primal_value:.10f}")
         print(f"dual upper bound:           {dual_value:.10f}")
         print(f"duality gap:                {duality_gap:.3e}")
@@ -1915,7 +1917,7 @@ def check_mf_certificate(
         print(f"min eig dual slack 2:       {min_eig_dual_slack_2:.3e}")
         print(f"min eig dual slack:         {min_dual_slack_eig:.3e}")
         print()
-        print("exact-feasibility post-processing (paper appendix, certified brackets)")
+        print("floating-point feasibility diagnostic (not a proof)")
         print(f"dual shift e1:              {repair['repair_e1']:.3e}")
         print(f"dual shift e2:              {repair['repair_e2']:.3e}")
         print(f"primal mix weight:          {repair['repair_mix_weight']:.3e}")
@@ -1929,9 +1931,14 @@ def check_mf_certificate(
             f"{repair['repaired_dual_slack_2_min_eig']:.3e}"
         )
         print(
-            "certified bracket:          "
-            f"[{repair['bracket_lower']:.10f}, {repair['bracket_upper']:.10f}]"
-            f" ({'verified' if repair['repair_verified'] else 'NOT VERIFIED'})"
+            "candidate bracket:          "
+            f"[{repair['candidate_lower']:.10f}, "
+            f"{repair['candidate_upper']:.10f}]"
+            " (non-rigorous)"
+        )
+        print(
+            "numerical repair:           "
+            f"{'passed' if repair['numerical_repair_passed'] else 'FAILED'}"
         )
         print()
         print(f"status: {result['status']}")
@@ -2479,8 +2486,8 @@ def run_protocol_sdp(
 def run_certificate_cli(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(
         description=(
-            "Generate a reduced one-round MF comb SDP certificate and check it "
-            "without the solver."
+            "Generate a reduced one-round MF comb SDP numerical witness and "
+            "check its floating-point residuals."
         )
     )
     parser.add_argument(
@@ -2494,7 +2501,7 @@ def run_certificate_cli(argv: list[str] | None = None) -> None:
     parser.add_argument(
         "--solver",
         default="CLARABEL",
-        help="CVXPY solver used to produce the certificate. Default: CLARABEL.",
+        help="CVXPY solver used to produce the witness. Default: CLARABEL.",
     )
     parser.add_argument(
         "--output",
@@ -2502,7 +2509,7 @@ def run_certificate_cli(argv: list[str] | None = None) -> None:
         dest="path",
         default=None,
         help=(
-            "Certificate .npz path. Default: "
+            "Numerical witness .npz path. Default: "
             "<repo-root>/certificates/<protocol>_mf_certificate.npz."
         ),
     )
@@ -2515,7 +2522,7 @@ def run_certificate_cli(argv: list[str] | None = None) -> None:
     parser.add_argument(
         "--check-only",
         action="store_true",
-        help="Only check an existing certificate instead of solving and saving first.",
+        help="Only check an existing witness instead of solving and saving first.",
     )
     parser.add_argument(
         "--no-compress",
@@ -2532,7 +2539,7 @@ def run_certificate_cli(argv: list[str] | None = None) -> None:
     try:
         protocol_key = _canonical_protocol_key(str(args.protocol))
         if protocol_key == "cv":
-            raise ValueError("MF certificates are implemented for finite DV SDPs only.")
+            raise ValueError("MF witnesses are implemented for finite DV SDPs only.")
         _dv_protocol_instance(protocol_key)
     except ValueError as e:
         raise SystemExit(str(e))
@@ -2567,7 +2574,7 @@ def run_certificate_cli(argv: list[str] | None = None) -> None:
     except FileNotFoundError as e:
         raise SystemExit(str(e))
     except KeyError as e:
-        raise SystemExit(f"Certificate is missing required array: {e}")
+        raise SystemExit(f"Numerical witness is missing required array: {e}")
     except ValueError as e:
         raise SystemExit(str(e))
 
@@ -2578,7 +2585,19 @@ def run_certificate_cli(argv: list[str] | None = None) -> None:
 
     if saved is not None:
         print()
-        print(f"Saved certificate to: {saved['path']}")
+        print(f"Saved numerical witness to: {saved['path']}")
+
+
+def run_exact_certificate_cli(argv: list[str] | None = None) -> None:
+    """Run the solver-free exact DV certificate verifiers."""
+    try:
+        from verification.verify_all import main as verify_exact
+    except ImportError as error:
+        raise SystemExit(
+            "Exact verifiers are unavailable. Run this command from the source "
+            "artifact or install the verification package."
+        ) from error
+    verify_exact(argv)
 
 
 def run_sdp_cli(argv: list[str] | None = None) -> None:
@@ -2783,6 +2802,12 @@ def run_benchmark_cli(argv: List[str] | None = None):
 
     if args and args[0].lower() in {"certificate", "cert"}:
         return run_certificate_cli(args[1:])
+    if args and args[0].lower() in {
+        "exact-certificate",
+        "exact-cert",
+        "verify-exact",
+    }:
+        return run_exact_certificate_cli(args[1:])
     if args and args[0].lower() == "sdp":
         return run_sdp_cli(args[1:])
     return run_sdp_cli(args)

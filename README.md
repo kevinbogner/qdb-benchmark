@@ -12,8 +12,9 @@ The artifact builds the paper's reduced one-round fast-phase games as
 semidefinite programs (SDPs), solves the distance-fraud and mafia-fraud
 programs for the discrete-variable QDB protocols, runs the restricted
 Gaussian finite-grid estimator for the CV-QDB protocol, and checks the
-shipped mafia-fraud certificates with a solver-independent NumPy
-checker.
+discrete-variable mafia-fraud values with solver-free exact-arithmetic
+primal and dual certificates. The shipped NumPy files retain the raw
+numerical solver witnesses for reproducibility.
 
 ## Installation
 
@@ -46,22 +47,40 @@ Appendix B); the CV entries are the Gaussian benchmark and the
 finite-grid MF estimate. Takes about a minute and a half on a laptop;
 the CV grid dominates.
 
-**Certified mafia-fraud brackets (Tables 3 and 4).**
+**Exact discrete-variable mafia-fraud certificates (Tables 1, 3, and 4).**
+
+```
+uv run qdb-benchmark exact-certificate --protocol all
+```
+
+The verifier independently rebuilds every DV tester and checks matching
+primal and dual witnesses using exact arithmetic only. It does not call
+an SDP solver or rely on the floating-point `.npz` files. It proves
+
+```
+QDB 2017 rapid phase                    1
+QDB 2019                               (5 + sqrt(5)) / 8
+Mutual QDB first timed return leg       3 / 4
+E91 QDB retained value-check branches  (8 + sqrt(24 + 17 sqrt(2))) / 16
+```
+
+The rational cases use `fractions.Fraction`; QDB 2019 is checked over
+`Q(sqrt(5))`; and E91 is checked over
+`Q(sqrt(2), sqrt(24 + 17 sqrt(2)))`. Positivity is established by exact
+LDL decompositions. The E91 verifier decides algebraic signs using
+rational square-root enclosures.
+
+**Numerical solver witnesses.**
 
 ```
 uv run qdb-benchmark certificate --protocol qdb2019 --check-only
 ```
 
-(similarly for the other DV protocol keys). Using NumPy linear algebra
-only — no SDP solver — the checker rebuilds the averaged tester from the
-protocol description, verifies the stored primal and dual witnesses,
-turns them into exactly feasible ones (the exact-feasibility step of
-the paper's Appendix A), and prints the certified bracket for the MF
-value. This takes seconds per protocol.
-
-Note that the objectives stored in the certificate files are raw solver
-output, feasible only up to solver tolerance. The values reported in
-the paper are the certified brackets printed by the checker.
+(similarly for the other DV protocol keys). This NumPy command rebuilds
+the tester and reports the residuals, eigenvalues, and duality gap of the
+stored solver output. Its floating-point repair and candidate bracket
+are diagnostics, not a mathematical certificate; use
+`exact-certificate` for the proof.
 
 **CV calibration sweep (Figure 2).**
 
@@ -83,24 +102,33 @@ uv run qdb-benchmark sdp --protocol e91
 Solves one protocol's programs (`--solver SCS` or `--solver CLARABEL`;
 CV grid parameters are exposed as `--cv-*` flags, see `--help`).
 
-**Regenerating the certificates.**
+**Regenerating the numerical solver witnesses.**
 
 ```
 uv run qdb-benchmark certificate --protocol qdb2019
 ```
 
-Re-solves the primal and dual MF comb SDPs, saves a fresh certificate
-to `certificates/`, and checks it.
+Re-solves the primal and dual MF comb SDPs, saves fresh numerical
+witnesses to `certificates/`, and checks their floating-point residuals.
 
 ## Layout
 
-- `qdb_benchmark_standalone.py` — all code in one self-contained file
-  by design; internal sections cover the quantum helpers, the protocol
-  models, the SDP construction and certificates, and the CLI.
-- `certificates/` — the shipped MF certificates (`.npz` files storing
-  the primal comb, probe state, dual witness, and protocol metadata).
+- `qdb_benchmark_standalone.py` — numerical protocol models, SDP
+  construction, benchmark routines, and the CLI.
+- `verification/` — standalone exact primal/dual certificate verifiers
+  and the combined `exact-certificate` entry point.
+- `tests/` — exact-tester regression checks against the numerical
+  protocol implementation and end-to-end witness checks.
+- `certificates/` — shipped numerical MF solver witnesses (`.npz` files
+  storing the primal comb, probe state, dual point, and protocol metadata).
 - `results/`, `figures/` — output of the CV calibration sweep as used
   in the paper.
+
+Run the regression suite with:
+
+```
+uv run python -m unittest discover -v
+```
 
 ## License
 
