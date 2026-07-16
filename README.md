@@ -7,6 +7,7 @@ Code and data artifact for the paper
 > **Security evaluation of quantum distance-bounding protocols via
 > semidefinite programming**
 > Kevin Bogner, Aysajan Abidin, Dave Singelée, Bart Preneel
+> [arXiv:2607.13464](https://arxiv.org/abs/2607.13464)
 
 The artifact builds the paper's reduced one-round fast-phase games as
 semidefinite programs (SDPs), solves the distance-fraud and mafia-fraud
@@ -136,4 +137,24 @@ MIT, see `LICENSE`.
 
 ## Citing
 
-A citation entry will be added once the paper is public.
+To cite the paper:
+
+```bibtex
+@misc{bogner2026sdp,
+  title         = {{Security evaluation of quantum distance-bounding
+                    protocols via semidefinite programming}},
+  author        = {Bogner, Kevin and Abidin, Aysajan and
+                   Singel{\'e}e, Dave and Preneel, Bart},
+  howpublished  = {arXiv:2607.13464},
+  eprint        = {2607.13464},
+  archiveprefix = {arXiv},
+  primaryclass  = {quant-ph},
+  year          = {2026},
+  doi           = {10.48550/arXiv.2607.13464}
+}
+```
+
+To cite this artifact itself, use the version DOI
+[10.5281/zenodo.21361445](https://doi.org/10.5281/zenodo.21361445)
+(v1.0.1) or the concept DOI
+[10.5281/zenodo.21307978](https://doi.org/10.5281/zenodo.21307978).
