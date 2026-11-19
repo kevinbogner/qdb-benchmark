@@ -1,13 +1,18 @@
 #!/usr/bin/env python3
 """Closed-form values for the CV-QDB protocol.
 
-These are the numbers of the paper's section "Continuous-variable QDB". The
-model uses hbar = 2, so every vacuum quadrature has variance 1. The verifier
-prepares a two-mode squeezed vacuum with squeezing r and reads its reference
-value from one quadrature of the mode it keeps. A round passes when the value
-that the verifier reads from the reply lies within the tolerance delta of the
-reference value. The verifier's measurements add no noise, and the honest
-prover's reply carries its measured value exactly.
+The module evaluates the CV-QDB values of the paper's section
+"Continuous-variable QDB" and of Table 1, namely the honest pass probability,
+the exact distance-fraud value, and the mafia-fraud entry of Table 1. It also
+evaluates one example of the paper's bright-probe attack. The paper describes
+this attack in words and does not print the numbers of the example.
+
+The model uses hbar = 2, so every vacuum quadrature has variance 1. The
+verifier prepares a two-mode squeezed vacuum with squeezing r and reads its
+reference value from one quadrature of the mode it keeps. A round passes when
+the value that the verifier reads from the reply lies within the tolerance
+delta of the reference value. The verifier's measurements add no noise, and
+the honest prover's reply carries its measured value exactly.
 
 Every pass probability below is the probability that a Gaussian error with
 mean zero stays within delta, which is erf(delta / sqrt(2 * variance)). The
@@ -20,11 +25,14 @@ from __future__ import annotations
 import argparse
 import json
 import math
+from typing import Any
 
-# Parameters of the paper: squeezing r, tolerance delta, and the smaller
-# amplitude A of the bright probe (the larger amplitude is 2A).
+# Parameters of the paper: squeezing r and tolerance delta.
 SQUEEZING = 1.2
 TOLERANCE = 1.1
+
+# Smaller amplitude A of the bright probe in the example (the larger amplitude
+# is 2A). The paper does not fix the amplitudes.
 PROBE_AMPLITUDE = 10.4
 
 # The adversary reads an amplitude of its probe with a Gaussian error of this
@@ -94,6 +102,10 @@ def attack_success_probability(
     mix-up of the two amplitudes, which gives the wrong measured quadrature.
     Without this error the adversary passes like the honest prover, and with
     it the adversary measures the wrong quadrature of the challenge mode.
+
+    The value holds in the model of this module, in which the prover's reply
+    carries its measured value exactly. A physical reply is noisy in its other
+    quadrature, and the amplitudes must then stand out from that noise too.
     """
     mixup = amplitude_mixup_probability(amplitude)
     return (1.0 - mixup) * honest_pass_probability(
@@ -125,8 +137,13 @@ def compute_values(
     squeezing: float = SQUEEZING,
     tolerance: float = TOLERANCE,
     amplitude: float = PROBE_AMPLITUDE,
-) -> dict[str, float]:
-    """Return the CV-QDB numbers of the paper for the given parameters."""
+) -> dict[str, Any]:
+    """Return the CV-QDB values for the given parameters.
+
+    The top-level entries are the parameters and the values of the paper. The
+    entry ``bright_probe_example`` holds the example of the bright-probe
+    attack, whose numbers the paper does not print.
+    """
     return {
         "squeezing": squeezing,
         "tolerance": tolerance,
@@ -134,26 +151,29 @@ def compute_values(
         "honest_pass_probability": honest_pass_probability(squeezing, tolerance),
         "reference_variance": reference_variance(squeezing),
         "distance_fraud_value": distance_fraud_value(squeezing, tolerance),
-        "probe_amplitude_small": amplitude,
-        "probe_amplitude_large": 2.0 * amplitude,
-        "readout_error_variance": READOUT_ERROR_VARIANCE,
-        "amplitude_mixup_probability": amplitude_mixup_probability(amplitude),
-        "wrong_quadrature_pass_probability": wrong_quadrature_pass_probability(
-            squeezing, tolerance
-        ),
-        "attack_success_probability": attack_success_probability(
-            squeezing, tolerance, amplitude
-        ),
         "mafia_fraud_table_entry": mafia_fraud_table_entry(squeezing, tolerance),
-        "probe_mean_photon_number": probe_mean_photon_number(amplitude),
-        "challenge_mean_photon_number": challenge_mean_photon_number(squeezing),
+        "bright_probe_example": {
+            "probe_amplitude_small": amplitude,
+            "probe_amplitude_large": 2.0 * amplitude,
+            "readout_error_variance": READOUT_ERROR_VARIANCE,
+            "amplitude_mixup_probability": amplitude_mixup_probability(amplitude),
+            "wrong_quadrature_pass_probability": wrong_quadrature_pass_probability(
+                squeezing, tolerance
+            ),
+            "attack_success_probability": attack_success_probability(
+                squeezing, tolerance, amplitude
+            ),
+            "probe_mean_photon_number": probe_mean_photon_number(amplitude),
+            "challenge_mean_photon_number": challenge_mean_photon_number(squeezing),
+        },
     }
 
 
-def _print_values(values: dict[str, float]) -> None:
+def _print_values(values: dict[str, Any]) -> None:
     def row(label: str, text: str) -> None:
         print(f"  {label:<55}{text}")
 
+    example = values["bright_probe_example"]
     print("CV-QDB closed-form values (hbar = 2, vacuum variance 1)")
     row("squeezing r", f"{values['squeezing']:g}")
     row("tolerance delta", f"{values['tolerance']:g}")
@@ -172,41 +192,48 @@ def _print_values(values: dict[str, float]) -> None:
         f"{values['distance_fraud_value']:.6f}",
     )
     print()
-    print("Mafia fraud, bright-probe attack")
-    row(
-        "probe amplitudes A and 2A",
-        f"{values['probe_amplitude_small']:g} and {values['probe_amplitude_large']:g}",
-    )
-    row("read-out error variance", f"{values['readout_error_variance']:g}")
-    row(
-        "amplitude mix-up, (1 - erf(A / 4)) / 2",
-        f"{values['amplitude_mixup_probability']:.3e}",
-    )
-    row(
-        "wrong quadrature, erf(delta / (2 sqrt(cosh(2r))))",
-        f"{values['wrong_quadrature_pass_probability']:.6f}",
-    )
-    row("attack success probability", f"{values['attack_success_probability']:.6f}")
+    print("Mafia fraud")
     row(
         "CV MF entry of Table 1 (honest pass, rounded down)",
         f">= {values['mafia_fraud_table_entry']:.4f}",
     )
+    print()
+    print("Example of the bright-probe attack (not printed in the paper)")
+    print("  The prover's reply carries its measured value exactly, as in the paper's")
+    print("  model. A physical reply is noisy in its other quadrature, and the")
+    print("  amplitudes must then stand out from that noise too.")
+    row(
+        "probe amplitudes A and 2A",
+        f"{example['probe_amplitude_small']:g} and "
+        f"{example['probe_amplitude_large']:g}",
+    )
+    row("read-out error variance", f"{example['readout_error_variance']:g}")
+    row(
+        "amplitude mix-up, (1 - erf(A / 4)) / 2",
+        f"{example['amplitude_mixup_probability']:.3e}",
+    )
+    row(
+        "wrong quadrature, erf(delta / (2 sqrt(cosh(2r))))",
+        f"{example['wrong_quadrature_pass_probability']:.6f}",
+    )
+    row("attack success probability", f"{example['attack_success_probability']:.6f}")
     row(
         "mean photon number of the probe, 5 A^2 / 4",
-        f"{values['probe_mean_photon_number']:.1f}",
+        f"{example['probe_mean_photon_number']:.1f}",
     )
     row(
         "mean photon number of the challenge mode, sinh(r)^2",
-        f"{values['challenge_mean_photon_number']:.3f}",
+        f"{example['challenge_mean_photon_number']:.3f}",
     )
 
 
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(
         description=(
-            "Print the closed-form CV-QDB values of the paper: the honest pass "
-            "probability, the exact distance-fraud value, and the bright-probe "
-            "mafia-fraud attack."
+            "Print the closed-form CV-QDB values of the paper (the honest pass "
+            "probability, the exact distance-fraud value, and the mafia-fraud "
+            "entry of Table 1) and an example of the bright-probe mafia-fraud "
+            "attack, whose numbers the paper does not print."
         )
     )
     parser.add_argument(
@@ -226,8 +253,8 @@ def main(argv: list[str] | None = None) -> None:
         type=float,
         default=PROBE_AMPLITUDE,
         help=(
-            "Smaller amplitude A of the bright probe; the larger one is 2A. "
-            f"Default: {PROBE_AMPLITUDE}."
+            "Smaller amplitude A of the bright probe in the example; the "
+            f"larger one is 2A. Default: {PROBE_AMPLITUDE}."
         ),
     )
     parser.add_argument(

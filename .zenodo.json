@@ -1,6 +1,6 @@
 {
   "title": "qdb-benchmark: code and data artifact for \"Security evaluation of quantum distance-bounding protocols via semidefinite programming\"",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "upload_type": "software",
   "license": "MIT",
   "creators": [

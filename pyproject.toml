@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "qdb-benchmark"
-version = "1.0.2"
+version = "1.0.3"
 description = "One-round QDB benchmarks with exact DV mafia-fraud certificates"
 requires-python = ">=3.10"
 license = "MIT"

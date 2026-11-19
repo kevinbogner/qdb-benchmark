@@ -11,7 +11,7 @@ from verification import cv_closed_forms
 
 
 class PaperValueTests(unittest.TestCase):
-    """The numbers of the paper's section "Continuous-variable QDB"."""
+    """The values of the paper's section "Continuous-variable QDB" and Table 1."""
 
     def setUp(self) -> None:
         self.values = cv_closed_forms.compute_values()
@@ -22,9 +22,6 @@ class PaperValueTests(unittest.TestCase):
     def test_parameters(self) -> None:
         self.assertEqual(self.values["squeezing"], 1.2)
         self.assertEqual(self.values["tolerance"], 1.1)
-        self.assertEqual(self.values["probe_amplitude_small"], 10.4)
-        self.assertEqual(self.values["probe_amplitude_large"], 20.8)
-        self.assertEqual(self.values["readout_error_variance"], 2.0)
 
     def test_honest_prover(self) -> None:
         self.assert_prints_as("honest_error_variance", ".2f", "0.18")
@@ -44,29 +41,79 @@ class PaperValueTests(unittest.TestCase):
             places=14,
         )
 
+    def test_table_entry(self) -> None:
+        # Table 1 lists the CV MF value as at least 0.9901, the honest pass
+        # probability rounded down.
+        self.assertEqual(self.values["mafia_fraud_table_entry"], 0.9901)
+        self.assertLess(
+            self.values["mafia_fraud_table_entry"],
+            self.values["honest_pass_probability"],
+        )
+
+    def test_values_do_not_depend_on_the_example(self) -> None:
+        other = cv_closed_forms.compute_values(amplitude=5.0)
+        for key, value in self.values.items():
+            if key != "bright_probe_example":
+                self.assertEqual(other[key], value, key)
+        self.assertNotEqual(
+            other["bright_probe_example"], self.values["bright_probe_example"]
+        )
+
+
+class BrightProbeExampleTests(unittest.TestCase):
+    """The example of the bright-probe attack, which the paper does not print."""
+
+    def setUp(self) -> None:
+        self.values = cv_closed_forms.compute_values()
+        self.example = self.values["bright_probe_example"]
+
+    def assert_prints_as(self, key: str, format_spec: str, expected: str) -> None:
+        self.assertEqual(format(self.example[key], format_spec), expected)
+
+    def test_entries(self) -> None:
+        self.assertEqual(
+            set(self.example),
+            {
+                "probe_amplitude_small",
+                "probe_amplitude_large",
+                "readout_error_variance",
+                "amplitude_mixup_probability",
+                "wrong_quadrature_pass_probability",
+                "attack_success_probability",
+                "probe_mean_photon_number",
+                "challenge_mean_photon_number",
+            },
+        )
+
+    def test_parameters(self) -> None:
+        self.assertEqual(self.example["probe_amplitude_small"], 10.4)
+        self.assertEqual(self.example["probe_amplitude_large"], 20.8)
+        self.assertEqual(self.example["readout_error_variance"], 2.0)
+
     def test_bright_probe_attack(self) -> None:
         self.assert_prints_as("amplitude_mixup_probability", ".2e", "1.18e-04")
         self.assertAlmostEqual(
-            self.values["amplitude_mixup_probability"],
+            self.example["amplitude_mixup_probability"],
             (1.0 - math.erf(10.4 / 4.0)) / 2.0,
             places=14,
         )
         self.assert_prints_as("wrong_quadrature_pass_probability", ".4f", "0.2586")
         self.assertAlmostEqual(
-            self.values["wrong_quadrature_pass_probability"],
+            self.example["wrong_quadrature_pass_probability"],
             math.erf(1.1 / (2.0 * math.sqrt(math.cosh(2.4)))),
             places=14,
         )
         self.assert_prints_as("attack_success_probability", ".6f", "0.990103")
 
-    def test_table_entry(self) -> None:
-        # Table 1 lists the CV MF value as at least 0.9901, the honest pass
-        # probability rounded down. The attack with amplitudes 10.4 and 20.8
-        # reaches this entry and stays below the honest pass probability.
-        self.assertEqual(self.values["mafia_fraud_table_entry"], 0.9901)
-        self.assertGreaterEqual(self.values["attack_success_probability"], 0.9901)
+    def test_reaches_table_entry(self) -> None:
+        # The attack with amplitudes 10.4 and 20.8 reaches the entry of Table 1
+        # and stays below the honest pass probability.
+        self.assertGreaterEqual(
+            self.example["attack_success_probability"],
+            self.values["mafia_fraud_table_entry"],
+        )
         self.assertLess(
-            self.values["attack_success_probability"],
+            self.example["attack_success_probability"],
             self.values["honest_pass_probability"],
         )
 
@@ -141,6 +188,20 @@ class CommandTests(unittest.TestCase):
             cv_closed_forms.compute_values(),
         )
 
+    def test_cv_values_text_marks_the_example(self) -> None:
+        stdout = io.StringIO()
+        with contextlib.redirect_stdout(stdout):
+            benchmark.main(["cv-values"])
+        paper, heading, example = stdout.getvalue().partition(
+            "Example of the bright-probe attack (not printed in the paper)"
+        )
+        self.assertTrue(heading)
+        for text in ("0.990190", "0.359237", ">= 0.9901"):
+            self.assertIn(text, paper)
+        for text in ("10.4 and 20.8", "1.180e-04", "0.990103", "135.2", "2.278"):
+            self.assertNotIn(text, paper)
+            self.assertIn(text, example)
+
     def test_table_row(self) -> None:
         row = benchmark._cv_table_entry()
         values = cv_closed_forms.compute_values()
@@ -148,7 +209,7 @@ class CommandTests(unittest.TestCase):
         self.assertEqual(row["df_status"], "closed_form")
         self.assertEqual(row["df_value"], values["distance_fraud_value"])
         self.assertEqual(row["mf_status"], "attack_lower_bound")
-        self.assertEqual(row["mf_value"], values["attack_success_probability"])
+        self.assertEqual(row["mf_value"], values["mafia_fraud_table_entry"])
         self.assertEqual(row["completeness_status"], "closed_form")
         self.assertEqual(row["completeness_value"], values["honest_pass_probability"])
         self.assertEqual(row["cv_values"], values)

@@ -53,7 +53,7 @@ def _require_cv_sweep_dependencies() -> None:
         )
 
 
-__version__ = "1.0.2"
+__version__ = "1.0.3"
 
 # === quantum.py ===
 
@@ -2622,6 +2622,19 @@ def run_exact_certificate_cli(argv: list[str] | None = None) -> None:
     verify_exact(argv)
 
 
+def run_qdb2019_probe_cli(argv: list[str] | None = None) -> None:
+    """Run the exact check of an optimal QDB 2019 probe without entanglement."""
+    try:
+        from verification.qdb2019_product_probe import main as verify_probe
+    except ImportError as error:
+        raise SystemExit(
+            "The exact check of the QDB 2019 probe is unavailable. Run this "
+            "command from the source artifact or install the verification "
+            "package."
+        ) from error
+    verify_probe(argv)
+
+
 def _load_cv_closed_forms():
     """Import the closed-form CV-QDB module shipped next to the exact verifiers."""
     try:
@@ -2635,7 +2648,7 @@ def _load_cv_closed_forms():
 
 
 def run_cv_values_cli(argv: list[str] | None = None) -> None:
-    """Print the closed-form CV-QDB values of the paper."""
+    """Print the closed-form CV-QDB values of the paper and the attack example."""
     _load_cv_closed_forms().main(argv)
 
 
@@ -2854,6 +2867,8 @@ def run_benchmark_cli(argv: List[str] | None = None):
         "verify-exact",
     }:
         return run_exact_certificate_cli(args[1:])
+    if args and args[0].lower() in {"qdb2019-probe", "qdb2019_probe"}:
+        return run_qdb2019_probe_cli(args[1:])
     if args and args[0].lower() in {"cv-values", "cv_values"}:
         return run_cv_values_cli(args[1:])
     if args and args[0].lower() == "sdp":
@@ -2874,9 +2889,10 @@ def _cv_table_entry() -> Dict[str, object]:
     CV-QDB row of the paper table.
 
     The DF value and the honest pass probability are closed forms. The MF
-    value is the success probability of the bright-probe attack, so it bounds
-    the optimum from below. The paper table lists it as at least
-    ``cv_values["mafia_fraud_table_entry"]``.
+    value is the entry of the paper's table, the honest pass probability
+    rounded down. The bright-probe attack approaches the honest pass
+    probability, so the entry bounds the optimum from below. The example in
+    ``cv_values["bright_probe_example"]`` is not printed in the paper.
     """
     values = _load_cv_closed_forms().compute_values()
     df_known, mf_known = _protocol_known_vars("cv")
@@ -2887,7 +2903,7 @@ def _cv_table_entry() -> Dict[str, object]:
         "df_status": "closed_form",
         "df_value": values["distance_fraud_value"],
         "mf_status": "attack_lower_bound",
-        "mf_value": values["attack_success_probability"],
+        "mf_value": values["mafia_fraud_table_entry"],
         "completeness_status": "closed_form",
         "completeness_value": values["honest_pass_probability"],
         "cv_values": values,
