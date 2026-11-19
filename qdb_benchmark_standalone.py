@@ -53,7 +53,7 @@ def _require_cv_sweep_dependencies() -> None:
         )
 
 
-__version__ = "0.1.0"
+__version__ = "1.0.2"
 
 # === quantum.py ===
 
@@ -931,6 +931,12 @@ class QDBE91(QDBProtocol):
     and encoding bases. This implementation keeps the simulator’s 1-qubit interface
     by computing the post-measurement (collapsed) state on the Prover side
     conditioned on the Verifier’s measurement basis/outcome.
+
+    The benchmark values refer to the fixed protocol of the paper that this
+    artifact accompanies: the prover's setting ap is derived from the PRF, like
+    b, and is never announced. In the published protocol the prover announces ap
+    after the fast phase, which allows an attack that the one-round game does
+    not cover.
     """
 
     name = "E91 QDB"
@@ -1008,10 +1014,10 @@ class QDBE91(QDBProtocol):
 
     def get_response_state(self, config: Dict[str, int], c: int) -> torch.Tensor:
         """
-        Target response state for the prover's announced basis/encoding basis pair.
+        Target response state for the prover's measurement basis/encoding basis pair.
 
         The current single-qubit response interface models the prover as measuring the
-        collapsed entangled qubit in its announced basis and re-encoding that bit in
+        collapsed entangled qubit in its measurement basis and re-encoding that bit in
         basis b. Derive the bit from the cached collapsed state rather than from the
         Bell-state label string.
         """
@@ -1095,7 +1101,8 @@ class QDBE91(QDBProtocol):
 
         return {
             "phase": "authentication",
-            "requires_prover_setting_disclosure": True,
+            # Fixed protocol: both parties derive the prover's setting from the PRF.
+            "requires_prover_setting_disclosure": False,
             "round_type_counts": round_type_counts,
             "value_matching_success": value_matching_success,
             "value_matching_pass": value_matching_pass,
@@ -1128,8 +1135,11 @@ def _canonical_protocol_key(protocol: str) -> str:
 """SDP and Gaussian benchmark routines for the QDB artifact.
 
 This module contains the numerical tasks reported in the paper:
-DF state SDPs, DV MF comb SDPs, numerical MF witness generation/checking, and the
-restricted finite-grid Gaussian CV benchmark.
+DF state SDPs, DV MF comb SDPs, and numerical MF witness generation/checking.
+It also keeps the restricted finite-grid Gaussian CV estimator of the paper's
+first version (arXiv:2607.13464v1). The revised paper does not use that
+estimator. Its CV-QDB values are closed forms, evaluated in
+``verification/cv_closed_forms.py``.
 """
 
 
@@ -2245,8 +2255,13 @@ def _solve_cv_mf_preask_grid(
 
     The probe is a displaced squeezed Gaussian mode with an energy cap. This is
     not a full CV optimum; it is an energy-constrained finite Gaussian grid
-    benchmark with adaptive challenge measurement, corresponding to the
-    manuscript's CV MF benchmark value p_MF^CV.
+    benchmark with adaptive challenge measurement. It gave the CV MF estimate
+    0.9138 of the paper's first version (arXiv:2607.13464v1).
+
+    The revised paper does not use this estimate. The published protocol puts
+    no cap on the probe energy, and the bright-probe attack evaluated in
+    ``verification/cv_closed_forms.py`` shows that the CV MF value is at least
+    0.9901.
     """
     if phi_grid_size < 1:
         raise ValueError("phi_grid_size must be >= 1")
@@ -2355,11 +2370,15 @@ def run_cv_protocol_sdp(
     mf_preask_z_sigma: float = 8.0,
 ) -> Dict[str, object]:
     """
-    CV-QDB Gaussian estimation analysis.
+    CV-QDB Gaussian estimation analysis of the paper's first version.
 
     DF is solved via a small scalar SDP with PSD lifts for squared terms.
     MF is an energy-constrained finite Gaussian pre-ask grid benchmark with
     adaptive challenge measurements, not a continuous Gaussian optimum.
+
+    The revised paper shows that this DF value is exact over all strategies
+    and replaces the MF estimate by the bright-probe attack. Its CV-QDB values
+    are printed by the ``cv-values`` subcommand and in the CV row of ``table``.
     """
     df, _df_rows, _df_mse = _solve_cv_df_sdp(protocol, solver=solver)
     mf_preask, mf_preask_meta = _solve_cv_mf_preask_grid(
@@ -2382,7 +2401,10 @@ def run_cv_protocol_sdp(
         "df_value": df.value,
         "mf_status": mf_preask.status,
         "mf_value": mf_preask.value,
-        "mf_quantity": "p_MF^CV",
+        "mf_quantity": (
+            "energy-capped Gaussian grid estimate of arXiv:2607.13464v1; "
+            "not the MF value"
+        ),
         "mf_preask_status": mf_preask.status,
         "mf_preask_value": mf_preask.value,
         "mf_preask_meta": mf_preask_meta,
@@ -2600,11 +2622,30 @@ def run_exact_certificate_cli(argv: list[str] | None = None) -> None:
     verify_exact(argv)
 
 
+def _load_cv_closed_forms():
+    """Import the closed-form CV-QDB module shipped next to the exact verifiers."""
+    try:
+        from verification import cv_closed_forms
+    except ImportError as error:
+        raise SystemExit(
+            "The CV-QDB closed forms are unavailable. Run this command from the "
+            "source artifact or install the verification package."
+        ) from error
+    return cv_closed_forms
+
+
+def run_cv_values_cli(argv: list[str] | None = None) -> None:
+    """Print the closed-form CV-QDB values of the paper."""
+    _load_cv_closed_forms().main(argv)
+
+
 def run_sdp_cli(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(
         description=(
             "Integrated analysis: SDP for QDB2017/QDB2019/"
-            "mutual-entanglement/e91 and Gaussian estimation benchmarks for CV-QDB."
+            "mutual-entanglement/e91 and, for CV-QDB, the Gaussian estimates of "
+            "the paper's first version (arXiv:2607.13464v1). The CV-QDB values "
+            "of the revised paper are printed by the cv-values subcommand."
         )
     )
     parser.add_argument(
@@ -2718,11 +2759,16 @@ def run_sdp_cli(argv: list[str] | None = None) -> None:
     print(f"Solver: {out['solver']}")
     if protocol_key == "cv":
         print(
+            "Gaussian estimates of the paper's first version "
+            "(arXiv:2607.13464v1). For the CV-QDB values of the revised paper, "
+            "run the cv-values subcommand."
+        )
+        print(
             "DF  (no-online-response Gaussian benchmark): "
             f"status={out['df_status']} value={out['df_value']:.6f}"
         )
         print(
-            "MF  (pre-ask Gaussian finite-energy grid): "
+            "MF  (pre-ask Gaussian grid with a probe-energy cap; not the MF value): "
             f"status={out['mf_status']} value={out['mf_value']:.6f}"
         )
         meta = out.get("mf_preask_meta")
@@ -2808,6 +2854,8 @@ def run_benchmark_cli(argv: List[str] | None = None):
         "verify-exact",
     }:
         return run_exact_certificate_cli(args[1:])
+    if args and args[0].lower() in {"cv-values", "cv_values"}:
+        return run_cv_values_cli(args[1:])
     if args and args[0].lower() == "sdp":
         return run_sdp_cli(args[1:])
     return run_sdp_cli(args)
@@ -2821,18 +2869,50 @@ def run_benchmark_cli(argv: List[str] | None = None):
 TABLE_PROTOCOLS = ["qdb2017", "qdb2019", "mutual-entanglement", "e91", "cv"]
 
 
+def _cv_table_entry() -> Dict[str, object]:
+    """
+    CV-QDB row of the paper table.
+
+    The DF value and the honest pass probability are closed forms. The MF
+    value is the success probability of the bright-probe attack, so it bounds
+    the optimum from below. The paper table lists it as at least
+    ``cv_values["mafia_fraud_table_entry"]``.
+    """
+    values = _load_cv_closed_forms().compute_values()
+    df_known, mf_known = _protocol_known_vars("cv")
+    return {
+        "protocol": "cv",
+        "df_known": list(df_known),
+        "mf_known": list(mf_known),
+        "df_status": "closed_form",
+        "df_value": values["distance_fraud_value"],
+        "mf_status": "attack_lower_bound",
+        "mf_value": values["attack_success_probability"],
+        "completeness_status": "closed_form",
+        "completeness_value": values["honest_pass_probability"],
+        "cv_values": values,
+    }
+
+
 def run_table_cli(argv: List[str] | None = None) -> None:
     if argv:
         raise SystemExit("table does not accept arguments")
     results = {}
     for protocol in TABLE_PROTOCOLS:
-        results[protocol] = run_protocol_sdp(protocol, solver="SCS")
+        if protocol == "cv":
+            results[protocol] = _cv_table_entry()
+        else:
+            results[protocol] = run_protocol_sdp(protocol, solver="SCS")
     print(json.dumps(results, indent=2))
 
 
 # === scripts/cv_calibration_sweep.py ===
 
-"""Run and plot the CV-QDB calibration-dependence experiment."""
+"""Run and plot the CV-QDB calibration sweep of the paper's first version.
+
+The sweep uses the restricted Gaussian grid estimator and produced Figure 2 of
+arXiv:2607.13464v1. The revised paper has no such figure.
+"""
 
 
 BASE_R = 1.2
@@ -3120,14 +3200,19 @@ def _plot_sweep(long_df: pd.DataFrame, path: Path) -> list[Path]:
 def parse_cv_sweep_args(argv: List[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
-            "Run the CV-QDB calibration sweep and render a seaborn/matplotlib plot."
+            "Run the CV-QDB calibration sweep of the paper's first version "
+            "(Figure 2 of arXiv:2607.13464v1) and render a seaborn/matplotlib "
+            "plot. The revised paper does not use this sweep."
         )
     )
     parser.add_argument(
         "--grid-profile",
         choices=("paper", "quick"),
         default="paper",
-        help="Use the paper grid or a smaller exploratory grid. Default: paper.",
+        help=(
+            "Use the grid of the paper's first version or a smaller exploratory "
+            "grid. Default: paper."
+        ),
     )
     parser.add_argument("--solver", default="SCS", help="CVXPY solver. Default: SCS.")
     parser.add_argument(
@@ -3161,6 +3246,11 @@ def run_cv_sweep_cli(argv: List[str] | None = None) -> None:
     if args.workers < 1:
         raise SystemExit("--workers must be >= 1")
 
+    print(
+        "Calibration sweep of the paper's first version (arXiv:2607.13464v1). "
+        "The revised paper does not use it.",
+        flush=True,
+    )
     grid = PAPER_GRID if args.grid_profile == "paper" else QUICK_GRID
     specs = _sweep_specs()
     results = _run_sweep(specs, grid=grid, solver=args.solver, workers=args.workers)
